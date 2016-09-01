@@ -34,7 +34,10 @@ def create():
 
     dwg = svgwrite.Drawing('tattoo.svg')
 
-    nb_lines = int(len(str_data)/8)
+    nb_lines = int(len(str_data)/16)
+
+    center_y = 0
+    center_x = 0
     for j in range(nb_lines):
         for i, bit in enumerate(
                 str_data[
@@ -42,25 +45,28 @@ def create():
                     (j+1)*int(len(str_data)/nb_lines)
                 ]
         ):
+            poly_vertex = 3
             stroke_color = svgwrite.rgb(0, 0, 0)
-            stroke_width = 0.2
-            fill_color = "black" if bit == "1" else "none"
-            radius = 0.95 - (stroke_width/2)
-            shift = 0 if j % 2 == 0 else 1
+            stroke_width = 0.1
+            fill_color = "none"
+            radius = 5
+            shift_y = 0 if (j+i)%2 == 0 else (0.5*radius)
+            center_x -= radius * math.sin(2 * math.pi * (poly_vertex-1) / poly_vertex)
             dwg.add(
                 dwg.polygon(
                     [
                         (
-                            1+2*i + shift + radius * math.sin(2 * math.pi * v / 6),
-                            1+1.75*j + radius * math.cos(2 * math.pi * v / 6)
-                        ) for v in range(6)
+                            center_x + math.pow(-1, (j+i)%2) * radius * math.sin(2 * math.pi * v / poly_vertex),
+                            center_y + shift_y + math.pow(-1, (j+i)%2) * radius * math.cos(2 * math.pi * v / poly_vertex)
+                        ) for v in range(poly_vertex)
                     ],
                     stroke=stroke_color,
                     stroke_width=stroke_width,
-                    fill=fill_color,
-                    stroke_linejoin="round"
+                    fill=fill_color
                 )
             )
+        center_y += radius*1.5
+        center_x = 0
 
     dwg.save()
 
