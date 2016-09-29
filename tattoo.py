@@ -12,15 +12,26 @@ def main():
         "--decode", '-d',
         action="store_true"
     )
+    parser.add_argument(
+        "--encode", '-e',
+        type=str
+    )
 
     args = parser.parse_args()
 
     if args.decode:
         decode()
     else:
-        create()
+        text = None
+        if args.encode:
+            text = args.encode
+        create(text)
 
-def create():
+def create(text=None):
+    if not text:
+        text = input("Text > ").strip()
+
+    print(text)
     encoding_output = subprocess.check_output(
         [
             "openssl", "enc",
@@ -28,11 +39,11 @@ def create():
             "-nosalt",
             "-pass", "pass:daddy"
         ],
-        input=bytes("Éliam BRENON - 2016-02-22\n", "utf-8")
+        input=bytes(text, "utf-8")
     )
     str_data = "".join(["{:08b}".format(byte) for byte in list(encoding_output)])
 
-    dwg = svgwrite.Drawing('tattoo.svg')
+    dwg = svgwrite.Drawing('tattoo.svg', size=('210mm', '297mm'))
 
     nb_lines = int(len(str_data)/8)
     for j in range(nb_lines):
@@ -43,9 +54,9 @@ def create():
                 ]
         ):
             stroke_color = svgwrite.rgb(0, 0, 0)
-            stroke_width = 0.2
+            stroke_width = 0.1
             fill_color = "black" if bit == "1" else "none"
-            radius = 0.95 - (stroke_width/2)
+            radius = 0.9 - (stroke_width/2)
             shift = 0 if j % 2 == 0 else 1
             dwg.add(
                 dwg.polygon(
