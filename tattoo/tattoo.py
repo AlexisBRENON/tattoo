@@ -14,12 +14,14 @@ def main():
     )
     parser.add_argument(
         "--encode", '-e',
-        type=str
+        type=str,
+        default=u"É♂ 20160222"
     )
     parser.add_argument(
         "--width", "-w",
         help="Tattoo width in mm",
-        type=int
+        type=int,
+        default=65
     )
 
     args = parser.parse_args()
@@ -27,15 +29,12 @@ def main():
     if args.decode:
         decode()
     else:
-        text = None
-        if args.encode:
-            text = args.encode
-        else:
-            text = input("Text > ").strip()
-        print(text)
+        text = args.encode
+        print("Text to encode: '{}'".format(text))
         encode(text, args.width)
 
 def encode(text, width):
+    # Compute ciphered message
     encoding_output = subprocess.check_output(
         [
             "openssl", "enc",
@@ -45,36 +44,48 @@ def encode(text, width):
         ],
         input=bytes(text, "utf-8")
     )
+    # Get binary representation
     str_data = "".join(["{:08b}".format(byte) for byte in list(encoding_output)])
     bits_data = [int(b) for b in str_data]
     bits_data.reverse()
 
-    num_vertices = 6
-    tattoo_bit_width = 8
-    tattoo_bit_height = int(len(bits_data)/tattoo_bit_width)
+    # Define some tattoo properties
+    num_vertices = 6 # Shape of cell (6 = honeycomb, 3 = triangle)
+    tattoo_bit_width = 8 # Number of bits per line
+    tattoo_bit_height = int(len(bits_data)/tattoo_bit_width) # Number of lines
 
-    radius = 0.8
-    print(radius)
+    # Define some properties of bit representation
+    radius = 0.75 # Radius used to draw poligon. With 1 poligons will be tangent
+    inner_radius = 0.45 # Radius used to fill out 0's representation
+    print("bit radius: ", radius)
+    print("inner bit radius: ", inner_radius)
 
-    bit_height = 2 * radius
-    bit_width = 2 * radius * math.sin(2 * math.pi * math.floor(num_vertices/4) / num_vertices)
-    print(bit_height, bit_width)
+    bit_height = 2 * radius * max([
+        math.cos(2 * math.pi * v / num_vertices) for v in range(num_vertices)
+        ]) # Height of a bit representation.
+    bit_width = 2 * radius * max([
+        math.sin(2 * math.pi * v / num_vertices) for v in range(num_vertices)
+        ]) # Width of a bit representation
+    print("bit height and width: ", bit_height, bit_width)
 
-    tattoo_width = ((tattoo_bit_width + 0.5) * 2)
-    print(tattoo_width)
-    scale = width * 3.78 / tattoo_width
+    tattoo_width = ((tattoo_bit_width + 0.5) * bit_width) # Total width of the tattoo
+    print("tattoo width: ", tattoo_width)
+    scale = width * 3.78 / tattoo_width # Compute scale to match given width (3.78 is pixels per mm)
+
+    # Scale used values
     radius *= scale
+    inner_radius *= scale
     bit_height *= scale
     bit_width *= scale
 
+    # Start drawing with margin (just for easy printing)
     margin_x = 3 * bit_width
     margin_y = 3 * bit_height
 
     dwg = svgwrite.Drawing('tattoo.svg', size=('210mm', '297mm'))
-    stroke_color = svgwrite.rgb(0, 0, 0)
 
-    center_x = radius + margin_x
-    center_y = math.cos(30) * radius + margin_y
+    center_x = margin_x + radius
+    center_y = margin_y + radius
 
     def shift_bit(_):
         nonlocal center_x
@@ -91,18 +102,16 @@ def encode(text, width):
         ) for v in range(num_vertices)]
         polygon = dwg.polygon(
             points,
-            stroke=stroke_color,
             stroke_width=0,
             fill="black",
         )
         dwg.add(polygon)
         points = [(
-            center_x + (radius - 0.1) * math.sin(2 * math.pi * v / num_vertices),
-            center_y + (radius - 0.1) * math.cos(2 * math.pi * v / num_vertices)
+            center_x + inner_radius * math.sin(2 * math.pi * v / num_vertices),
+            center_y + inner_radius * math.cos(2 * math.pi * v / num_vertices)
         ) for v in range(num_vertices)]
         polygon = dwg.polygon(
             points,
-            stroke=stroke_color,
             stroke_width=0,
             fill="white"
         )
@@ -113,7 +122,6 @@ def encode(text, width):
                 center_x + radius * math.sin(2 * math.pi * v / num_vertices),
                 center_y + radius * math.cos(2 * math.pi * v / num_vertices)
             ) for v in range(num_vertices)],
-            stroke=stroke_color,
             stroke_width=0,
             fill="black",
         )
