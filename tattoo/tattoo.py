@@ -55,15 +55,17 @@ def encode(text, width):
     tattoo_bit_height = int(len(bits_data)/tattoo_bit_width) # Number of lines
 
     # Define some properties of bit representation
-    radius = 0.75 # Radius used to draw poligon. With 1 poligons will be tangent
-    inner_radius = 0.45 # Radius used to fill out 0's representation
-    print("bit radius: ", radius)
-    print("inner bit radius: ", inner_radius)
+    outside_radius = 0.92 # Radius used to draw poligon. With 1 poligons will be tangent
+    hole_radius = 0.56
+    inside_radius = 0.35
+    print("bit radius: ", outside_radius)
+    print("hole_radius: ", hole_radius)
+    print("inside bit radius: ", inside_radius)
 
-    bit_height = 2 * radius * max([
+    bit_height = 2 * outside_radius * max([
         math.cos(2 * math.pi * v / num_vertices) for v in range(num_vertices)
         ]) # Height of a bit representation.
-    bit_width = 2 * radius * max([
+    bit_width = 2 * outside_radius * max([
         math.sin(2 * math.pi * v / num_vertices) for v in range(num_vertices)
         ]) # Width of a bit representation
     print("bit height and width: ", bit_height, bit_width)
@@ -73,8 +75,9 @@ def encode(text, width):
     scale = width * 3.78 / tattoo_width # Compute scale to match given width (3.78 is pixels per mm)
 
     # Scale used values
-    radius *= scale
-    inner_radius *= scale
+    outside_radius *= scale
+    hole_radius *= scale
+    inside_radius *= scale
     bit_height *= scale
     bit_width *= scale
 
@@ -84,8 +87,8 @@ def encode(text, width):
 
     dwg = svgwrite.Drawing('tattoo.svg', size=('210mm', '297mm'))
 
-    center_x = margin_x + radius
-    center_y = margin_y + radius
+    center_x = margin_x + outside_radius
+    center_y = margin_y + outside_radius
 
     def shift_bit(_):
         nonlocal center_x
@@ -93,47 +96,34 @@ def encode(text, width):
     def shift_byte(j):
         nonlocal center_y, center_x
         center_y = center_y + (math.sqrt(3) * scale)
-        x_shift = 0 if j%2 == 1 else (radius)
-        center_x = radius + x_shift + margin_x
+        x_shift = 0 if j%2 == 1 else (outside_radius)
+        center_x = outside_radius + x_shift + margin_x
     def draw_0():
+        polygon = draw_1()
         points = [(
-            center_x + radius * math.sin(2 * math.pi * v / num_vertices),
-            center_y + radius * math.cos(2 * math.pi * v / num_vertices)
+            center_x + hole_radius * math.sin(2 * math.pi * v / num_vertices),
+            center_y + hole_radius * math.cos(2 * math.pi * v / num_vertices)
         ) for v in range(num_vertices)]
-        polygon = dwg.polygon(
-            points,
-            stroke_width=0,
-            fill="black",
-        )
-        dwg.add(polygon)
-        points = [(
-            center_x + inner_radius * math.sin(2 * math.pi * v / num_vertices),
-            center_y + inner_radius * math.cos(2 * math.pi * v / num_vertices)
-        ) for v in range(num_vertices)]
-        polygon = dwg.polygon(
-            points,
-            stroke_width=0,
-            fill="white"
-        )
-        dwg.add(polygon)
+        polygon.push(['M', points[0], 'L', *points[1:], 'Z'])
+        return polygon
     def draw_1():
-        polygon = dwg.polygon(
-            [(
-                center_x + radius * math.sin(2 * math.pi * v / num_vertices),
-                center_y + radius * math.cos(2 * math.pi * v / num_vertices)
-            ) for v in range(num_vertices)],
-            stroke_width=0,
-            fill="black",
-        )
-        dwg.add(polygon)
+        points = ["{} {}".format(
+            center_x + outside_radius * math.sin(2 * math.pi * v / num_vertices),
+            center_y + outside_radius * math.cos(2 * math.pi * v / num_vertices)
+        ) for v in range(num_vertices)]
+        polygon = svgwrite.path.Path(
+            d=['M', points[0], 'L', *points[1:], 'Z'],
+            stroke_width=0, fill="black", fill_rule="evenodd")
+        return polygon
+
 
     for j in range(tattoo_bit_height):
         for i in range(tattoo_bit_width):
             bit = bits_data.pop()
             if bit == 0:
-                draw_0()
+                dwg.add(draw_0())
             elif bit == 1:
-                draw_1()
+                dwg.add(draw_1())
             else:
                 raise RuntimeError()
             shift_bit(i)
