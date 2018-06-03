@@ -65,9 +65,9 @@ def encode(text, width):
     tattoo_bit_height = int(len(bits_data)/tattoo_bit_width) # Number of lines
 
     # Define some properties of bit representation
-    outside_radius = 0.92 # Radius used to draw poligon. With 1 poligons will be tangent
-    hole_radius = 0.56
-    inside_radius = 0.35
+    outside_radius = 1.3 # Radius used to draw poligon. With 1 poligons will be tangent
+    hole_radius = 1
+    inside_radius = 0.5
     print("bit radius: ", outside_radius)
     print("hole_radius: ", hole_radius)
     print("inside bit radius: ", inside_radius)
@@ -97,7 +97,7 @@ def encode(text, width):
 
     dwg = svgwrite.Drawing('tattoo.svg', size=('210mm', '297mm'))
 
-    center_x = margin_x + outside_radius
+    center_x = margin_x + scale
     center_y = margin_y + outside_radius
 
     def shift_bit(_):
@@ -106,26 +106,43 @@ def encode(text, width):
     def shift_byte(j):
         nonlocal center_y, center_x
         center_y = center_y + (math.sqrt(3) * scale)
-        x_shift = 0 if j%2 == 1 else (outside_radius)
-        center_x = outside_radius + x_shift + margin_x
-    def draw_0():
-        polygon = draw_1()
+        x_shift = 0 if j%2 == 1 else (scale)
+        center_x = margin_x + scale + x_shift
+    def make_outside(polygon):
+        points = ["{} {}".format(
+            center_x + outside_radius * math.sin(2 * math.pi * v / num_vertices),
+            center_y + outside_radius * math.cos(2 * math.pi * v / num_vertices)
+        ) for v in range(num_vertices)]
+        polygon.push(['M', points[0], 'L', *points[1:], 'Z'])
+        return polygon
+    def make_hole(polygon):
         points = [(
             center_x + hole_radius * math.sin(2 * math.pi * v / num_vertices),
             center_y + hole_radius * math.cos(2 * math.pi * v / num_vertices)
         ) for v in range(num_vertices)]
         polygon.push(['M', points[0], 'L', *points[1:], 'Z'])
         return polygon
-    def draw_1():
+    def make_inside(polygon):
         points = ["{} {}".format(
-            center_x + outside_radius * math.sin(2 * math.pi * v / num_vertices),
-            center_y + outside_radius * math.cos(2 * math.pi * v / num_vertices)
+            center_x + inside_radius * math.sin(2 * math.pi * v / num_vertices),
+            center_y + inside_radius * math.cos(2 * math.pi * v / num_vertices)
         ) for v in range(num_vertices)]
-        polygon = svgwrite.path.Path(
-            d=['M', points[0], 'L', *points[1:], 'Z'],
-            stroke_width=0, fill="black", fill_rule="evenodd")
+        polygon.push(['M', points[0], 'L', *points[1:], 'Z'])
         return polygon
 
+    def draw_0():
+        polygon = svgwrite.path.Path(
+            stroke_width=0, fill="black", fill_rule="evenodd")
+        make_outside(polygon)
+        make_hole(polygon)
+        return polygon
+    def draw_1():
+        polygon = svgwrite.path.Path(
+            stroke_width=0, fill="black", fill_rule="evenodd")
+        make_outside(polygon)
+        make_hole(polygon)
+        make_inside(polygon)
+        return polygon
 
     for j in range(tattoo_bit_height):
         for i in range(tattoo_bit_width):
