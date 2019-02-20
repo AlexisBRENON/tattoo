@@ -4,7 +4,13 @@ import math
 import argparse
 import subprocess
 
+from Crypto.Cipher import AES
+from Crypto.Hash import HMAC, MD5, SHA
+from Crypto.Protocol.KDF import PBKDF2
+
 import svgwrite
+
+import pkcs7
 
 def main():
     parser = argparse.ArgumentParser()
@@ -34,16 +40,21 @@ def main():
         encode(text, args.width)
 
 def encode(text, width):
+    # Derive key
+    password = b"daddy"
+    block_size = 16
+    iter_count = 1000
+    kdf = PBKDF2(password, b"", block_size*2, iter_count)
+    key = kdf[:block_size]
+    key_mac = kdf[block_size:]
+    mac = HMAC.new(key_mac)
+
     # Compute ciphered message
-    encoding_output = subprocess.check_output(
-        [
-            "openssl", "enc",
-            "-aes-128-ecb",
-            "-nosalt",
-            "-pass", "pass:daddy"
-        ],
-        input=bytes(text, "utf-8")
-    )
+    cipher = AES.new(key, AES.MODE_ECB)
+    encrypted = cipher.encrypt(pkcs7.pad(bytes(text, "utf-8"), block_size))
+    mac.update(encrypted)
+    encoding_output = mac.digest()
+
     # Get binary representation
     str_data = "".join(["{:08b}".format(byte) for byte in list(encoding_output)])
     bits_data = [int(b) for b in str_data]
