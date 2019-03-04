@@ -1,12 +1,12 @@
 #! /usr/bin/env python3
 
 import math
+import base64
 import argparse
 import subprocess
 
 from Crypto.Cipher import AES
-from Crypto.Hash import HMAC, MD5, SHA256
-from Crypto.Protocol.KDF import PBKDF2
+from Crypto.Hash import SHA256
 
 import svgwrite
 
@@ -52,7 +52,6 @@ def encode(text, width):
     encrypted = cipher.encrypt(pkcs7.pad(bytes(text, "utf-8"), block_size))
     encoding_output = encrypted
 
-    import base64
     print(base64.b64encode(encoding_output))
 
     # Get binary representation
@@ -145,13 +144,17 @@ def decode():
     bytes_list = []
     i = 0
     while True:
-        byte = input("{}> ".format(i)).strip()
-        i += 1
-        if byte != "":
-            while len(byte) < 8:
-                byte += input("{}>> ".format(i-1)).strip()
-            bytes_list.append(int(byte, 2))
-        else:
+        try:
+            byte = input("{}> ".format(i)).strip()
+            i += 1
+            if byte != "":
+                while len(byte) < 8:
+                    byte += input("{}>> ".format(i-1)).strip()
+                bytes_list.append(int(byte, 2))
+            else:
+                break
+        except EOFError:
+            print("")
             break
 
     if len(bytes_list) % int(128/8) != 0:
@@ -162,15 +165,17 @@ def decode():
             )
         )
     bytes_data = bytes(bytes_list)
-    decoded = subprocess.check_output(
-        [
-            "openssl", "enc", "-d",
-            "-aes-128-ecb",
-            "-nosalt",
-            "-pass", "pass:daddy"
-        ],
-        input=bytes_data
-    )
+
+    password = b"daddy"
+    block_size = 16
+    md = SHA256.new(password)
+    key = md.digest()[0:block_size]
+    print("key=" + "".join(["{:02X}".format(b) for b in key]))
+
+    # Decrypt and unpad bytes
+    cipher = AES.new(key, AES.MODE_ECB)
+    decrypted = cipher.decrypt(bytes_data)
+    decoded = pkcs7.unpad(decrypted, block_size)
     print(str(decoded, "utf-8"))
 
 if __name__ == "__main__":
