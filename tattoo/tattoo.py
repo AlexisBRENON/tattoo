@@ -5,7 +5,7 @@ import argparse
 import subprocess
 
 from Crypto.Cipher import AES
-from Crypto.Hash import HMAC, MD5, SHA
+from Crypto.Hash import HMAC, MD5, SHA256
 from Crypto.Protocol.KDF import PBKDF2
 
 import svgwrite
@@ -43,17 +43,17 @@ def encode(text, width):
     # Derive key
     password = b"daddy"
     block_size = 16
-    iter_count = 1000
-    kdf = PBKDF2(password, b"", block_size*2, iter_count)
-    key = kdf[:block_size]
-    key_mac = kdf[block_size:]
-    mac = HMAC.new(key_mac)
+    md = SHA256.new(password)
+    key = md.digest()[0:block_size]
+    print("key=" + "".join(["{:02X}".format(b) for b in key]))
 
     # Compute ciphered message
     cipher = AES.new(key, AES.MODE_ECB)
     encrypted = cipher.encrypt(pkcs7.pad(bytes(text, "utf-8"), block_size))
-    mac.update(encrypted)
-    encoding_output = mac.digest()
+    encoding_output = encrypted
+
+    import base64
+    print(base64.b64encode(encoding_output))
 
     # Get binary representation
     str_data = "".join(["{:08b}".format(byte) for byte in list(encoding_output)])
