@@ -1,1 +1,6 @@
+venv/
+*.iml
+
+__pycache__/
+
 *.svg

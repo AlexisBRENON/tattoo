@@ -3,16 +3,21 @@
 import math
 import base64
 import argparse
+import random
+
+from collections import namedtuple
+from typing import List
 
 from Crypto.Cipher import AES
 from Crypto.Hash import SHA256
-from collections import namedtuple
 
 from svgwrite import Drawing
 from svgwrite.container import Group
+from svgwrite.pattern import Pattern
 from svgwrite.path import Path
-from svgwrite.shapes import Polyline
-from typing import Sequence, List
+from svgwrite.shapes import Polyline, Circle
+
+from sobol_seq import i4_sobol_generate
 
 import pkcs7
 
@@ -67,6 +72,22 @@ Point = namedtuple("Point", ("x", "y"))
 
 
 class Tattoo:
+
+    dense_dot_pattern = Pattern((0, 0), (10, 10),
+                                patternUnits='userSpaceOnUse', id="dense-dots")
+    for p in i4_sobol_generate(2, 66, random.randint(0, 100)) * 10:
+        dense_dot_pattern.add(Circle(
+            center=(p[0], p[1]), r=0.5,
+            stroke_width=0, fill="black"
+        ))
+    light_dot_pattern = Pattern((0, 0), (10, 10),
+                                patternUnits='userSpaceOnUse', id="light-dots")
+    for p in i4_sobol_generate(2, 33, random.randint(0, 100)) * 10:
+        light_dot_pattern.add(Circle(
+            center=(p[0], p[1]), r=0.5,
+            stroke_width=0, fill="black"
+        ))
+
     def __init__(self):
         millimeter_width = 65
         self.tattoo_bit_width = 8  # Number of bits per line
@@ -98,6 +119,8 @@ class Tattoo:
         self.margin = Point(3 * bit_width, 3 * bit_height)
 
         self.dwg = Drawing('tattoo.svg', size=('210mm', '297mm'))
+        self.dwg.add(self.dense_dot_pattern)
+        self.dwg.add(self.light_dot_pattern)
 
         self.center = Point(
             self.margin.x + self.scale,
@@ -137,6 +160,9 @@ class Tattoo:
             stroke_width=1, stroke="black"
         )
 
+        filling_patterns = [
+            "none", self.light_dot_pattern.get_funciri(), self.dense_dot_pattern.get_funciri()
+        ]
         for i in range(0, 3):
             points = ["{} {}".format(
                 self.center.x + self.outside_radius * math.sin(2 * math.pi * v / self.num_vertices),
@@ -144,7 +170,7 @@ class Tattoo:
             ) for v in range(2 * i, 2 * (i + 1) + 1)]
             data = ['M', "{0.x} {0.y}".format(self.center), 'L', *points, 'Z']
             path = Path(data,
-                        fill="rgb({0}, {0}, {0})".format(255 - 48 * (i + 1)))
+                        fill=filling_patterns[i])
             group.add(path)
         self.dwg.add(group)
 
