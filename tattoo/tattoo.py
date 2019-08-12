@@ -26,7 +26,7 @@ def main():
     parser.add_argument(
         "--encode", '-e',
         type=str,
-        default=u"É♂ 20160222"
+        default=u"L♂ 20190807"
     )
     args = parser.parse_args()
 
