@@ -3,7 +3,6 @@
 import math
 import base64
 import argparse
-import random
 
 from collections import namedtuple
 from typing import List
@@ -70,6 +69,17 @@ def encode(text):
 
 
 Point = namedtuple("Point", ("x", "y"))
+Dimensions = namedtuple("Style", ("stroke_width", "bit_radius"))
+
+
+class Polygon:
+    def __init__(self, num_vertices: int):
+        self.num_vertices = num_vertices
+        self.T_deg = 180 / num_vertices
+        self.T_rad = math.radians(self.T_deg)
+        self.outer_circle_radius = 1 / (2 * math.sin(math.pi / num_vertices))
+        self.apotheme = self.outer_circle_radius * math.cos(self.T_rad)
+        self.inner_circle_radius = self.apotheme
 
 
 class ExperimentalTattoo:
@@ -77,229 +87,149 @@ class ExperimentalTattoo:
     def __init__(self):
         self._define_variables()
         self.dwg = Drawing('tattoo.svg', size=('210mm', '297mm'))
-        self.dwg.viewbox(-20, -20, 40, 40)
 
-        self._define_style()
-        self._define_dot_pattern()
         self._define_zero_symbol()
         self._define_one_symbol()
 
     def _define_variables(self):
-        self.num_vertices = 6
-
-    def _define_dot_pattern(self):
-        # Define pattern for dot work
-        dot = Symbol(id="dot")
-        dot.add(Circle(center=(0, 0), r=0.5))
-        self.dwg.defs.add(dot)
-        self.dot_pattern = Pattern((-20, -20), (40, 40), id="dots",
-                                   patternUnits="userSpaceOnUse")
-        num_dense = 66
-        num_light = int(num_dense / 2)
-        for i, p in enumerate(
-                i4_sobol_generate(2, num_dense) * 40 +
-                np.random.rand(num_dense, 2)):
-            self.dot_pattern.add(Use(dot.get_iri(), (p[0], p[1]),
-                                     class_="dense" if i >= num_light else "dense light"))
-        self.dwg.defs.add(self.dot_pattern)
+        self.poly = Polygon(6)
+        self.dimens = Dimensions(1, 20)
 
     def _define_zero_symbol(self):
         zero = Symbol(id="zero", class_="bit-0", stroke_width=1, stroke="black", fill="none")
-        zero.add(Circle(center=(0, 0), r=20, fill="none", stroke="none"))
+        zero.add(Circle(center=(0, 0), r=self.dimens.bit_radius, fill="none", stroke="none"))
         r = 0.75
 
-        for i in range(self.num_vertices):
+        n = self.poly.num_vertices
+        for i in range(n):
             vertex = Point(
-                20 * math.sin(2 * math.pi * i / self.num_vertices),
-                20 * math.cos(2 * math.pi * i / self.num_vertices))
+                self.dimens.bit_radius * math.sin(2 * math.pi * i / n),
+                self.dimens.bit_radius * math.cos(2 * math.pi * i / n))
 
             previous_vertex = Point(
-                20 * math.sin(2 * math.pi * (i + self.num_vertices - 1) / self.num_vertices),
-                20 * math.cos(2 * math.pi * (i + self.num_vertices - 1) / self.num_vertices))
+                self.dimens.bit_radius * math.sin(2 * math.pi * (i + n - 1) / n),
+                self.dimens.bit_radius * math.cos(2 * math.pi * (i + n - 1) / n))
             start_point = Point(
                 (1 - r) * previous_vertex.x + r * vertex.x,
                 (1 - r) * previous_vertex.y + r * vertex.y
             )
 
             next_vertex = Point(
-                20 * math.sin(2 * math.pi * (i + self.num_vertices + 1) / self.num_vertices),
-                20 * math.cos(2 * math.pi * (i + self.num_vertices + 1) / self.num_vertices))
+                self.dimens.bit_radius * math.sin(2 * math.pi * (i + n + 1) / n),
+                self.dimens.bit_radius * math.cos(2 * math.pi * (i + n + 1) / n))
             end_point = Point(
                 (1 - r) * next_vertex.x + r * vertex.x,
                 (1 - r) * next_vertex.y + r * vertex.y
             )
 
-            line = Polyline([start_point, vertex, end_point])
+            line = Polyline([start_point, vertex, end_point], stroke_linejoin="bevel")
             zero.add(line)
         self.dwg.defs.add(zero)
 
     def _define_one_symbol(self):
-        one = Symbol(id="one", class_="bit-1", stroke_width=1, stroke="black")
-        one.add(Circle(center=(0, 0), r=20, fill="none", stroke="none"))
+        dot = Symbol(id="dot")
+        dot.add(Circle(center=(0, 0), r=self.dimens.stroke_width * 0.4, fill="black", stroke="none"))
+        self.dwg.defs.add(dot)
 
-        face_symbol = Symbol(id="face")
+        one = Symbol(id="one", class_="bit-1", stroke_width=1, stroke="black")
+        one.add(Circle(center=(0, 0), r=self.dimens.bit_radius, fill="none", stroke="none"))
+
+        empty_face_symbol = Symbol(id="empty_face")
+        light_face_symbol = Symbol(id="light_face")
+        dense_face_symbol = Symbol(id="dense_face")
+
         points = ["{} {}".format(
-            20 * math.sin(2 * math.pi * v / self.num_vertices),
-            20 * math.cos(2 * math.pi * v / self.num_vertices)
+            self.dimens.bit_radius * math.sin(2 * math.pi * v / self.poly.num_vertices),
+            self.dimens.bit_radius * math.cos(2 * math.pi * v / self.poly.num_vertices)
         ) for v in range(0, 3)]
         data = ['M', "0 0 L", *points, 'Z']
-        path = Path(data, fill=self.dot_pattern.get_funciri())
-        face_symbol.add(path)
-        self.dwg.defs.add(face_symbol)
 
-        classes = [None, "dots-light", "dots-dense"]
-        for i in range(0, 3):
-            face = Use(face_symbol.get_iri())
-            face.rotate(i * 120)
-            if classes[i]:
-                face.attribs['class'] = classes[i]
-            one.add(face)
+        path = Path(data, fill="none", stroke_linejoin="bevel")
+        empty_face_symbol.add(path)
+        light_face_symbol.add(path)
+        dense_face_symbol.add(path)
+
+        x0 = 0
+        x1 = self.dimens.bit_radius * math.sin(2 * math.pi * 2 / self.poly.num_vertices)
+        y0 = self.dimens.bit_radius * math.cos(2 * math.pi * 2 / self.poly.num_vertices)
+        y1 = self.poly.outer_circle_radius * self.dimens.bit_radius
+        w = x1 - x0
+        h = y1 - y0
+        h_rect = y1
+
+        num_dense = 200
+        num_light = int(num_dense / 2)
+        points = np.apply_along_axis(
+            lambda p: np.array([p[0] * w, p[1] * h_rect + p[0] * y0]),
+            1,
+            np.clip(
+                i4_sobol_generate(2, num_dense) + np.random.rand(num_dense, 2) / h,
+                0, 1
+            ))
+        for p in points[:num_light]:
+            light_face_symbol.add(Use(dot.get_iri(), (p[0], p[1])))
+            dense_face_symbol.add(Use(dot.get_iri(), (p[0], p[1])))
+        for p in points[num_light:]:
+            dense_face_symbol.add(Use(dot.get_iri(), (p[0], p[1])))
+        self.dwg.defs.add(empty_face_symbol)
+        self.dwg.defs.add(light_face_symbol)
+        self.dwg.defs.add(dense_face_symbol)
+
+        f1 = Use(empty_face_symbol.get_iri())
+        one.add(f1)
+        f2 = Use(dense_face_symbol.get_iri())
+        f2.rotate(120)
+        one.add(f2)
+        f3 = Use(light_face_symbol.get_iri())
+        f3.rotate(240)
+        one.add(f3)
         self.dwg.defs.add(one)
 
     def encode(self, bits_data: List[int]):
-        test = Use("#one")
-        self.dwg.add(test)
-        self.dwg.save(pretty=True)
-
-
-class Tattoo:
-
-    def __init__(self):
-        millimeter_width = 65
-        self.tattoo_bit_width = 8  # Number of bits per line
-        self.num_vertices = 6
-        self.outside_radius = 1.15  # Radius used to draw polygon. With 1 polygons will be tangent
-
-        bit_height = 2 * self.outside_radius * max([
-            math.cos(2 * math.pi * v / self.num_vertices) for v in range(self.num_vertices)
-        ])  # Height of a bit representation.
-        bit_width = 2 * self.outside_radius * max([
-            math.sin(2 * math.pi * v / self.num_vertices) for v in range(self.num_vertices)
-        ])  # Width of a bit representation
-        self.bit_size = Point(
-            bit_width, bit_height
-        )
-
-        tattoo_width = ((self.tattoo_bit_width + 0.5) * self.bit_size.x)  # Total width of the tattoo
-        # Compute scale to match given width (3.78 is pixels per mm)
-        self.scale = millimeter_width * 3.78 / tattoo_width
-
-        # Scale used values
-        self.outside_radius *= self.scale
-        self.bit_size = Point(
-            bit_height * self.scale,
-            bit_width * self.scale
-        )
-
-        # Start drawing with margin (just for easy printing)
-        self.margin = Point(3 * bit_width, 3 * bit_height)
-
-        self.dwg = Drawing('tattoo.svg', size=('210mm', '297mm'))
-
-        # Define pattern for dot work
-        dot = Circle(center=(0, 0), r=0.5, stroke_width=0, fill="none")
-        self.dwg.defs.add(dot)
-        self.dot_pattern = Pattern((0, 0), (self.bit_size.x, self.bit_size.y),
-                                   id="dots")
-        num_dense = int(0.66 * self.bit_size.x * self.bit_size.y)
-        num_light = int(num_dense / 2)
-        for i, p in enumerate(
-                i4_sobol_generate(2, num_dense) *
-                np.array([self.bit_size.x, self.bit_size.y]) +
-                np.random.rand(num_dense, 2)):
-            self.dot_pattern.add(Use(dot.get_iri(), (p[0], p[1]),
-                                     class_="dense" if i > num_light else "dense light"))
-        self.dwg.defs.add(self.dot_pattern)
-
-        self.center = Point(
-            self.margin.x + self.scale,
-            self.margin.y + self.outside_radius)
-
-    def encode(self, bits_data: List[int]):
-        tattoo_bit_height = int(len(bits_data) / self.tattoo_bit_width)
+        tattoo_bit_height = int(len(bits_data) / 8)
+        x, y = 0, 0
+        xmin, xmax = 0, 0
+        ymin, ymax = 0, 0
+        tattoo = Group(id="tattoo")
         for j in range(tattoo_bit_height):
-            for i in range(self.tattoo_bit_width):
+            for i in range(8):
+                if x > xmax:
+                    xmax = x
+                if y > ymax:
+                    ymax = y
                 bit = bits_data.pop()
                 if bit == 0:
-                    self.draw0()
+                    tattoo.add(Use("#zero", (x, y)))
                 elif bit == 1:
-                    self.draw1()
+                    tattoo.add(Use("#one", (x, y)))
                 else:
                     raise RuntimeError()
-                self.shift_bit()
-            self.shift_byte(j)
-        self.dwg.save()
+                x, y = self.shift_bit(x, y)
+            x, y = self.shift_byte(j, y)
 
-    def shift_bit(self):
-        self.center = Point(
-            self.center.x + (2 * self.scale),
-            self.center.y
+        xmax += self.poly.inner_circle_radius * self.dimens.bit_radius * 2
+        ymax += self.poly.outer_circle_radius * self.dimens.bit_radius * 2
+        tattoo_width = xmax - xmin
+        tattoo_height = ymax - ymin
+        scaled_width_mm = 65
+        scale_factor = scaled_width_mm * 3.78 / tattoo_width
+        scaled_height_mm = tattoo_height * scale_factor / 3.78
+        tattoo.scale(scale_factor)
+        tattoo.translate(
+            3.78 * (210 - scaled_width_mm) / 2,
+            3.78 * (297 - scaled_height_mm) / 2
         )
+        self.dwg.add(tattoo)
+        self.dwg.save(pretty=True)
 
-    def shift_byte(self, j):
-        x_shift = 0 if j % 2 == 1 else self.scale
-        self.center = Point(
-            self.margin.x + self.scale + x_shift,
-            self.center.y + (math.sqrt(3) * self.scale)
+    def shift_bit(self, x, y):
+        return x + 2 * self.poly.inner_circle_radius * self.dimens.bit_radius, y
+
+    def shift_byte(self, j, y):
+        return (
+            0 if j % 2 == 1 else self.poly.inner_circle_radius * self.dimens.bit_radius,
+            y + (math.sqrt(3) * self.poly.inner_circle_radius * self.dimens.bit_radius)
         )
-
-    def draw1(self):
-        group = Group(
-            class_="bit-1",
-            stroke_width=1, stroke="black"
-        )
-
-        filling_patterns = [
-            ("none", []),
-            (self.dot_pattern.get_funciri(), ["dot-light"]),
-            (self.dot_pattern.get_funciri(), ["dense"])
-        ]
-        for i in range(0, 3):
-            points = ["{} {}".format(
-                self.center.x + self.outside_radius * math.sin(2 * math.pi * v / self.num_vertices),
-                self.center.y + self.outside_radius * math.cos(2 * math.pi * v / self.num_vertices)
-            ) for v in range(2 * i, 2 * (i + 1) + 1)]
-            data = ['M', "{0.x} {0.y}".format(self.center), 'L', *points, 'Z']
-            path = Path(data,
-                        fill=filling_patterns[i][0],
-                        class_=filling_patterns[i][1])
-            group.add(path)
-        self.dwg.add(group)
-
-    def draw0(self):
-        group = Group(
-            class_="bit-0",
-            stroke_width=1, stroke="black",
-            fill="none"
-        )
-
-        r = 0.75
-
-        for i in range(self.num_vertices):
-            mid_point = Point(
-                self.center.x + self.outside_radius * math.sin(2 * math.pi * i / self.num_vertices),
-                self.center.y + self.outside_radius * math.cos(2 * math.pi * i / self.num_vertices))
-            previous_point = Point(
-                self.center.x + self.outside_radius * math.sin(
-                    2 * math.pi * (i + self.num_vertices - 1) / self.num_vertices),
-                self.center.y + self.outside_radius * math.cos(
-                    2 * math.pi * (i + self.num_vertices - 1) / self.num_vertices))
-            start_point = Point(
-                (1 - r) * previous_point.x + r * mid_point.x,
-                (1 - r) * previous_point.y + r * mid_point.y
-            )
-            next_point = Point(
-                self.center.x + self.outside_radius * math.sin(
-                    2 * math.pi * (i + self.num_vertices + 1) / self.num_vertices),
-                self.center.y + self.outside_radius * math.cos(
-                    2 * math.pi * (i + self.num_vertices + 1) / self.num_vertices))
-            end_point = Point(
-                (1 - r) * next_point.x + r * mid_point.x,
-                (1 - r) * next_point.y + r * mid_point.y
-            )
-            line = Polyline([start_point, mid_point, end_point])
-            group.add(line)
-        self.dwg.add(group)
 
 
 def decode():
