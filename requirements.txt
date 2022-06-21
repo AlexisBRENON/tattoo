@@ -2,4 +2,4 @@ pycrypto==2.6.1
 pyparsing==2.2.0
 svgwrite==1.1.11
 sobol_seq==0.1.2
-numpy==1.17.0
+numpy==1.22.0
